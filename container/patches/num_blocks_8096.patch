@@ -1,0 +1,13 @@
+diff --git a/include/Profile/TauMmapMemMgr.h b/include/Profile/TauMmapMemMgr.h
+index af805a9..487373e 100644
+--- a/include/Profile/TauMmapMemMgr.h
++++ b/include/Profile/TauMmapMemMgr.h
+@@ -8,7 +8,7 @@
+ #include <stdio.h>
+ 
+ // Note that this is per-thread and is not capped at 1MB blocks.
+-#define TAU_MEMMGR_MAX_MEMBLOCKS 64
++#define TAU_MEMMGR_MAX_MEMBLOCKS 8096
+ #define TAU_MEMMGR_DEFAULT_BLOCKSIZE 1048576 /* 1024x1024 In bytes */
+ 
+ #define TAU_MEMMGR_ALIGN sizeof(long) /* In bytes */

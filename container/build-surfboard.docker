@@ -1,0 +1,154 @@
+FROM nvidia/cuda:10.0-cudnn7-devel-ubuntu18.04
+
+ENV LD_LIBRARY_PATH /usr/local/cuda/lib64:$LD_LIBRARY_PATH
+ENV LC_ALL C
+
+# Linux libraries
+RUN apt-get -y update && apt-get -y install --allow-downgrades  --allow-change-held-packages --no-install-recommends make \
+    build-essential \
+    zlib1g-dev \
+    libncurses5-dev \
+    libxml2-dev \
+    cmake \
+    git \
+    curl \
+    vim \
+    wget \
+    nano \
+    libjpeg-dev \
+    libpng-dev \
+    gfortran \
+    ca-certificates \
+    software-properties-common
+
+# Install Open MPI
+RUN mkdir -p /tmp/openmpi && \
+    cd /tmp/openmpi && \
+    wget https://www.open-mpi.org/software/ompi/v3.1/downloads/openmpi-3.1.2.tar.gz && \
+    tar zxf openmpi-3.1.2.tar.gz && \
+    cd openmpi-3.1.2 && \
+    ./configure --prefix=/usr/local --enable-debug --with-cuda --with-hwloc && \
+    make -j $(nproc) all && \
+    make install && \
+    ldconfig && \
+    cd /tmp && \
+    rm -rf /tmp/openmpi
+
+#CARTESIUS libraries
+
+RUN mkdir /host_libs && \
+    mkdir /target_libs && \
+    ln -s /host_libs/libosmcomp.so.3 /target_libs/libosmcomp.so.3 && \
+    ln -s /host_libs/librdmacm.so.1 /target_libs/librdmacm.so.1 && \
+    ln -s /host_libs/libibverbs.so.1 /target_libs/libibverbs.so.1 && \
+    ln -s /host_libs/libibumad.so.3 /target_libs/libibumad.so.3 && \
+    ln -s /host_libs/libnl-route-3.so.200 /target_libs/libnl-route-3.so.200 && \
+    ln -s /host_libs/libnl-3.so.200 /target_libs/libnl-3.so.200 && \
+    ln -s /host_libs/libmlx5-rdmav2.so /target_libs/libmlx5-rdmav2.so && \
+    ln -s /host_libs/libmlx4-rdmav2.so /target_libs/libmlx4-rdmav2.so && \
+    ln -s /host_libs/libpmi2.so.0 /target_libs/libpmi2.so.0 && \
+    ln -s /host_libs/libpmi.so.0 /target_libs/libpmi.so.0 && \
+    ln -s /host_libs/libslurm.so.30 /target_libs/libslurm.so.30
+
+# Configure OpenMPI to run good defaults:
+#   --bind-to none --map-by slot --mca btl_tcp_if_exclude lo,docker0
+#    echo "hwloc_base_binding_policy = none" >> /usr/local/etc/openmpi-mca-params.conf && \
+#    echo "rmaps_base_mapping_policy = slot" >> /usr/local/etc/openmpi-mca-params.conf 
+    #echo "btl_tcp_if_exclude = lo,docker0" >> /usr/local/etc/openmpi-mca-params.conf
+
+# Set default NCCL parameters
+RUN echo NCCL_DEBUG=INFO >> /etc/nccl.conf && \
+    echo NCCL_SOCKET_IFNAME=^docker0 >> /etc/nccl.conf
+
+# Install OpenSSH for MPI to communicate between containers
+RUN apt-get install -y --no-install-recommends openssh-client openssh-server && \
+    mkdir -p /var/run/sshd
+
+# Allow OpenSSH to talk to containers without asking for confirmation
+RUN cat /etc/ssh/ssh_config | grep -v StrictHostKeyChecking > /etc/ssh/ssh_config.new && \
+    echo "    StrictHostKeyChecking no" >> /etc/ssh/ssh_config.new && \
+    mv /etc/ssh/ssh_config.new /etc/ssh/ssh_config
+
+ENV PYTORCH_VERSION=1.2.0
+ENV PYTHON_VERSION=3.6
+ENV HOROVOD_GPU_ALLREDUCE=MPI
+ENV HOROVOD_GPU_ALLGATHER=MPI
+ENV HOROVOD_GPU_BROADCAST=MPI
+ENV HOROVOD_NCCL_HOME /usr/local/cuda/nccl
+ENV HOROVOD_NCCL_INCLUDE /usr/local/cuda/nccl/include
+ENV HOROVOD_NCCL_LIB /usr/local/cuda/nccl/lib 
+
+# Install Python 3.6 on top of Miniconda, all in a single pass
+RUN curl -o /tmp/miniconda.sh -O https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh  && \
+     chmod +x /tmp/miniconda.sh && \
+     /tmp/miniconda.sh -b -p /opt/conda && \
+     rm /tmp/miniconda.sh && \
+     /opt/conda/bin/conda install -y python=${PYTHON_VERSION} 
+
+# Add Conda exe to the PATH
+ENV PATH /opt/conda/bin:$PATH
+
+# Conda-level dependecies for Pytorch (from source)
+RUN conda install numpy pyyaml scipy ipython mkl mkl-include cython typing && \
+    conda clean -ya
+
+RUN conda install -y -c pytorch magma-cuda100 && \
+    conda clean -ya 
+
+# Install pip-level dependencies for Pytorch (taken from Pytorch requirements.txt)
+RUN pip install ninja future six setuptools Pillow
+
+# Install Pytorch/Torchvision and TF from Conda
+RUN conda install -y -c pytorch pytorch=${PYTORCH_VERSION} torchvision
+
+# Install Horovod, temporarily using CUDA stubs
+RUN ldconfig /usr/local/cuda-10.0/targets/x86_64-linux/lib/stubs && \
+    HOROVOD_GPU_ALLREDUCE=${HOROVOD_GPU_ALLREDUCE} HOROVOD_WITH_PYTORCH=1 pip install --no-cache-dir horovod && \
+    ldconfig
+
+# Install PDT, for TAU
+#get and install PDT
+RUN wget https://www.cs.uoregon.edu/research/tau/pdt_releases/pdtoolkit-3.25.1.tar.gz && tar -xf pdtoolkit-3.25.1.tar.gz && \
+    cd pdtoolkit-3.25.1/ && ./configure -prefix=/usr/local && make clean install && \
+    cd ../ && rm -rf pdtoolkit*
+
+# Install Java
+RUN apt-get update && apt-get install -y default-jdk
+
+# Install TAU
+
+COPY patches/num_blocks_8096.patch /tmp/
+
+RUN wget https://www.cs.uoregon.edu/research/tau/tau_releases/tau-2.28.1.tar.gz && \ 
+    tar -xf tau-2.28.1.tar.gz && \
+    PYTHON_INCLUDE_PATH=$(python -c "from sysconfig import get_paths as gp; print(gp()[\"include\"])"); \
+    PYTHON_LIB_PATH=/opt/conda/lib/python$PYTHON_VERSION; \
+    cd tau-2.28.1/ && \
+    patch -p1 < /tmp/num_blocks_8096.patch && \
+    ./configure -pdt=/usr/local -prefix=/usr/local -bfd=download -pythoninc=$PYTHON_INCLUDE_PATH -pythonlib=$PYTHON_LIB_PATH -mpi -pthread -opari -cuda=/usr/local/cuda-10.0 && \
+    make clean install && \
+    cd ../ && rm -rf tau-2.28.1/
+
+# Export TAU paths
+ENV PATH="/usr/local/x86_64/bin:${PATH}"
+ENV PYTHONPATH="/usr/local/x86_64/lib/bindings-mpi-python:${PYTHONPATH}"
+
+# Download Horovod examples
+RUN apt-get install -y --no-install-recommends subversion && \
+    svn checkout https://github.com/horovod/horovod/trunk/examples /examples && \
+    rm -rf /examples/.svn
+
+# Install DALI from pre-built wheel
+COPY wheels/nvidia_dali-0.18.0-12345-cp36-cp36m-manylinux1_x86_64.whl /tmp/
+RUN pip install /tmp/nvidia_dali-0.18.0-12345-cp36-cp36m-manylinux1_x86_64.whl && rm /tmp/nvidia_dali-0.18.0-12345-cp36-cp36m-manylinux1_x86_64.whl
+
+# Install Pyprof
+COPY patches/pyprof_parse.patch /tmp/
+
+RUN git clone https://github.com/NVIDIA/PyProf /tmp/pyprof && \
+    cd /tmp/pyprof && git checkout 77a4e70 && patch -p0 < /tmp/pyprof_parse.patch && \
+    pip install /tmp/pyprof && \
+    cd /tmp && \
+    rm -rf /tmp/pyprof
+
+RUN pip install git+https://github.com/Xilinx/brevitas.git

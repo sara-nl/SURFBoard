@@ -1,0 +1,43 @@
+
+net: resnet50
+
+# Model-specific hyperparameters that are sweeped over
+model_sweep:
+
+  batches_per_rep:
+    - 50
+
+  grad_precision:
+    - fp32
+
+  data_loader:
+    - dali-cpu-to-gpu
+
+  data_format:
+    - tfrecord
+
+  distributed_backend:
+    - horovod
+
+  compute_precision:
+    - fp32
+
+  batch_size_per_gpu:
+    - 64
+
+  workers:
+    - 8
+
+
+# Hparams that are sweeped over and passed to each experiment
+shared_sweep:
+
+  network_backend:
+    - ib
+
+  num_nodes:
+    - 1
+
+  gpus_per_node:
+    - 2
+

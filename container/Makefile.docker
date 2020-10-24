@@ -1,0 +1,20 @@
+
+SUDO=sudo
+DALI_WHEEL=wheels/nvidia_dali-0.18.0-12345-cp36-cp36m-manylinux1_x86_64.whl
+
+all: surfboard.sif
+
+$(DALI_WHEEL): build-dali.docker
+	$(SUDO) docker build -t surfboard:dali -f $< .
+	$(SUDO) docker create --name tmp_wheel surfboard:dali
+	mkdir -p wheels
+	$(SUDO) docker cp tmp_wheel:/wheelhouse/nvidia_dali-0.18.0-12345-cp36-cp36m-manylinux1_x86_64.whl $@
+	$(SUDO) docker rm -f tmp_wheel
+
+surfboard.tar: build-surfboard.docker $(DALI_WHEEL)
+	$(SUDO) docker build -t surfboard:latest -f $< .
+	$(SUDO) docker save -o surfboard.tar surfboard:latest
+
+surfboard.sif: surfboard.tar
+        $(SUDO) singularity build $@ docker-archive://$<
+

@@ -1,0 +1,26 @@
+
+SUDO=sudo
+BUILDARGS=
+DALI_WHEEL=wheels/nvidia_dali-0.18.0-12345-cp36-cp36m-manylinux1_x86_64.whl
+
+all: surfboard.sif
+
+singularity-cli_latest.sif:
+	singularity pull shub://singularityhub/singularity-cli:latest
+
+build-dali.def: build-dali.docker singularity-cli_latest.sif
+	singularity exec singularity-cli_latest.sif spython -i docker recipe $< > $@
+
+build-dali.sif: build-dali.def
+	$(SUDO) singularity build $(BUILDARGS) $@ $<
+
+$(DALI_WHEEL): build-dali.sif
+	mkdir -p wheels
+	singularity exec $< cp /wheelhouse/nvidia_dali-0.18.0-12345-cp36-cp36m-manylinux1_x86_64.whl $@
+
+build-surfboard.def: build-surfboard.docker singularity-cli_latest.sif
+	singularity exec singularity-cli_latest.sif spython -i docker recipe $< > $@
+
+surfboard.sif: build-surfboard.def $(DALI_WHEEL)
+	$(SUDO) singularity build $(BUILDARGS) $@ $<
+

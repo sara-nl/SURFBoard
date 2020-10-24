@@ -1,0 +1,38 @@
+diff --git pyprof/prof/linear.py pyprof/prof/linear.py
+index 78ace90..0a4f647 100644
+--- pyprof/prof/linear.py
++++ pyprof/prof/linear.py
+@@ -106,9 +106,10 @@ class Linear(OperatorLayerBase):
+ 
+         if any(x in d.name for x in Linear.gemmKernels):
+             self.op_ = "linear"
+-        else:
+-            assert any(x in d.name for x in Linear.biasKernels), f"Kernel data: {d}"
++        elif any(x in d.name for x in Linear.biasKernels):
+             self.op_ = "bias"
++        else:
++            self.op_ = "unrecognized"
+         '''
+ 		elif (("kernelPointwiseApply2" in d.name) or ("kernelReduceContigDim" in d.name) or ("kernelReduceNoncontigDim_shared" in d.name)):
+ 			#bias expansion was before the gemm
+@@ -161,7 +162,8 @@ class Linear(OperatorLayerBase):
+         elif self.op_ == "bias":
+             p = OrderedDict([('M', m), ('N', n), ('type', t)])
+         else:
+-            assert False
++            p = OrderedDict([('X', 0), ('W', 0), ('type', 'byte')])
++           # assert False
+         return p
+ 
+     def op(self):
+@@ -195,7 +197,9 @@ class Linear(OperatorLayerBase):
+             f = m * n
+             b = 2 * m * n * Utility.typeToBytes(self.type)
+         else:
+-            assert False
++            b = 0
++            f = 0
++            #assert False
+         return b, f
+ 
+     def bytes(self):

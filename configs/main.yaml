@@ -1,0 +1,26 @@
+# Set defaults for hydra
+defaults:
+  - rn50conf: single
+
+# Fixed hparams that are not sweeped over and passed to each experiment
+simg:
+data_path:
+index_path:
+extra_sargs: ''
+extra_mpiargs: ''
+profile_level: tau_exec
+max_num_nodes: 8
+max_workers: 8
+
+# Shared hparams between run confs that are sweeped over and passed to each experiment
+shared_sweep:
+  omp_num_threads: ${model_sweep.workers}
+
+
+# Various extra hparams that are shared and are not passed to each experiment
+extra:
+  reps: 1
+
+
+
+

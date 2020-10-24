@@ -1,0 +1,13 @@
+diff --git dali/python/bundle-wheel.sh dali/python/bundle-wheel.sh
+index 0af1a7a0..36d8ba0a 100755
+--- a/dali/python/bundle-wheel.sh
++++ b/dali/python/bundle-wheel.sh
+@@ -88,7 +88,7 @@ make_wheel_record() {
+ }
+ 
+ DEPS_LIST=(
+-    "/usr/local/lib64/libjpeg.so.62"
++    "/usr/local/lib/libjpeg.so.62"
+     "/usr/local/lib/libavformat.so.58"
+     "/usr/local/lib/libavcodec.so.58"
+     "/usr/local/lib/libavfilter.so.7"
