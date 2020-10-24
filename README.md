@@ -32,7 +32,7 @@ Each experiment generates a single file of the format `run_[repindex]_[configstr
 
 To profile the Nvidia ResNet50 design on Cartesius, launch a Slurm batch job as follows:
 ```
-cd NvidiaResNet50
+cd examples/
 sbatch -N <nodes> profile_cartesius.sh
 ```
 The batch script `profile_cartesius.sh` detects the number of available nodes and launches the experiment orchestrator appropriately.
